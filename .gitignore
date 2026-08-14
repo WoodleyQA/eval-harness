@@ -1,0 +1,25 @@
+# Generated Synthea output (~47MB, regenerable — see README)
+data/
+
+# Vendored Synthea clone (~226MB, its own git repo — see README for the clone command)
+vendor-synthea/
+
+# Local Claude Code settings (not shared)
+.claude/settings.local.json
+
+# Build/run logs
+overnight-run.log
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# macOS
+.DS_Store
