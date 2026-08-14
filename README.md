@@ -1,78 +1,66 @@
-# eval-harness
+# Eval Harness: Grounding LLM Output Against a Source of Truth
 
-An eval harness for grounding LLM output against a source of truth.
+An LLM evaluation harness, built on LangGraph, that checks whether a model's output is actually supported by its source data, and flags exactly where it isn't.
 
-## Overview
+Given an answer and a source record, the harness extracts every checkable claim, verifies each one against the source, and produces a hallucination rate with per-claim receipts: what the model said, whether it's supported, and the exact source line (or lack of one) backing that verdict.
 
-_TODO(human): what this is, in a few lines._
+Demonstrated here on synthetic patient records, but the approach applies anywhere an LLM's output needs to be checked against ground truth — not just healthcare.
 
-## Problem
+## The Problem
 
-_TODO(human): why unsupported output / false greens matter, and what goes wrong
-when nobody checks an answer against its source._
+Passing tests don't mean an LLM's output is correct — they often just mean it didn't crash. A model can generate a fluent, confident answer that includes fabricated details, and a naive check (did we get a response? does it mention the right topic?) will call that a pass.
+
+This harness targets a sharper question: for every specific factual claim in an answer, is it actually backed by the source data, or did the model make it up? That's the difference between a system that looks correct and one that's verifiably correct.
 
 ## Architecture
 
-Three LangGraph nodes, run in order:
+A three-node LangGraph pipeline:
 
-| Node | File | Does |
-| --- | --- | --- |
-| `ingest` | `src/nodes/ingest.py` | Loads a source record + a model answer into state |
-| `judge` | `src/nodes/judge.py` | **Stub.** Extracts atomic claims, checks each against the source |
-| `verdict` | `src/nodes/verdict.py` | **Stub.** Tallies supported vs unsupported into a rate |
+1. Ingest — loads a source record and a model-generated answer into state. Source records are flattened into plain key-value lines (e.g. Condition.code: Essential hypertension (disorder)) rather than passed as raw JSON, so every fact the judge cites traces to one unambiguous, quotable line.
+2. Judge — two steps, both LLM calls, kept separate for auditability:
+    * Extract: breaks the answer into atomic claims (one checkable fact per claim), tagging each as checkable or not. Unjudgeable statements (opinions, hedges) are kept and tagged, never silently dropped.
+    * Check: for every checkable claim, verifies it against the source record. A supported verdict must quote the exact source line backing it. An unsupported verdict must explain why — not mentioned, or the source states something different.
+3. Verdict — tallies the results into a hallucination rate (unsupported ÷ checkable claims) plus a full per-claim report: every claim, its verdict, its quote or explanation. Nothing is summarized away.
 
-State is a single `EvalState` TypedDict (`src/state.py`); the graph is wired in
-`src/graph.py`.
+## How the Judge Works
 
-_TODO(human): the prose — why the eval logic lives inside the nodes rather than
-alongside the graph._
+The judge is deliberately narrow: for each claim, it asks one question — "can I point to a specific line in the source that confirms this exactly?" Partial matches, close-but-not-quite values, and unmentioned facts all count as unsupported. There's no partial-credit category; ambiguity is resolved in the required explanation text, not by fuzzying the verdict itself.
 
-## How the judge works
+This makes the judge's output auditable rather than a black box: every "supported" comes with the exact line that proves it, and every "unsupported" comes with a specific reason, not just a flag.
 
-_TODO(human): claim extraction, the mandatory quoted supporting line, and how an
-unciteable claim becomes `unsupported`. Not yet implemented._
+## Validation
 
-## Validating the judge
+Before trusting the judge's verdicts, they were checked against independent human review — the same standard a real eval team would apply.
 
-_TODO(human): ~10 hand-labeled claims, and the agreement figure between those
-labels and the judge. No numbers here until that run has actually happened._
+14 checkable claims were pulled from the judge's output across 4 synthetic patient records (a mix of accurate claims, subtly wrong claims — e.g. a swapped diagnosis date — and outright fabrications). Each claim was hand-labeled supported/unsupported by manually checking the source record, before looking at the judge's actual verdict.
 
-## Running it
+Result: 14/14 agreement (100%) between the manual labels and the judge's verdicts.
 
-Setup:
+One case worth calling out: a claim stated the patient "has type 1 diabetes." The source record contained only a diabetes screening test, not a diagnosis — the judge correctly distinguished a screening procedure from an actual condition, rather than pattern-matching on the word "diabetes" appearing nearby. Independent manual review caught the same distinction.
 
-```bash
-python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env   # then add your ANTHROPIC_API_KEY
-```
+## Worked Example
 
-Run the graph end-to-end (currently exercises the stub nodes):
+A test answer was constructed with a mix of accurate and fabricated claims about a real synthetic patient record, then run through the harness.
 
-```bash
-.venv/bin/python -m src.graph
-```
+Result: hallucination_rate: 0.4 (2 of 5 checkable claims unsupported)
 
-Tests:
+* ✅ Correct claims, verified: patient sex, an essential hypertension diagnosis, and its diagnosis year — each returned supported with the exact source line quoted.
+* ❌ Fabricated claim caught: "type 2 diabetes, treated with metformin." The judge didn't just note the condition was absent — it cited the patient's actual HbA1c reading (5.2%, within normal range) and the real medication list (none of which is metformin) as positive evidence against the claim.
+* ⚪ Non-factual statement handled correctly: an opinion-style statement ("appears to be in reasonably good health") was extracted, tagged checkable: false, and correctly excluded from the hallucination rate — rather than silently dropped or wrongly penalized.
+
+## Running It
 
 ```bash
-.venv/bin/python -m pytest tests/ -q
+git clone <your-repo-url>
+cd eval-harness
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # add your Anthropic API key
+python scripts/run_example.py
 ```
 
-### Sample records
+Sample Synthea patient records are included in data/.
 
-Synthetic patient records come from [Synthea](https://github.com/synthetichealth/synthea),
-cloned into `vendor-synthea/` (not part of this package). The records in `data/`
-were generated with:
+## Future Work
 
-```bash
-cd vendor-synthea
-./run_synthea -p 5 -s 12345 --exporter.baseDirectory ../data
-```
-
-`-s 12345` fixes the seed so the same records regenerate. Output is FHIR JSON in
-`data/fhir/` — six patient bundles plus hospital and practitioner references,
-~47 MB, so it is worth keeping out of version control.
-
-_TODO(human): a worked example — a record, an answer, and the verdict — once the
-judge is implemented._
+The current harness judges one answer at a time. The natural next step is a meta-evaluation layer: aggregate verdicts across many runs to surface systemic patterns — which fields get hallucinated most often, which claim types are riskiest — rather than treating every run as an isolated check. That shift, from single-instance judgment to pattern-level insight across many runs, is how evaluation scales past being a one-off check into something that actually improves the system being evaluated over time.

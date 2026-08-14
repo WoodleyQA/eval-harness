@@ -14,7 +14,9 @@ class EvalState(TypedDict):
     Fields are populated progressively as the graph runs:
       ingest  -> source_record, answer
       judge   -> claims, verdicts
-      verdict -> hallucination_rate
+      verdict -> hallucination_rate, total_claims, checkable_claims,
+                 not_checkable_claims, supported_claims, unsupported_claims,
+                 findings
     """
 
     # Ground truth the answer is checked against. Plain text so the judge can
@@ -24,12 +26,23 @@ class EvalState(TypedDict):
     # The model-generated output under evaluation.
     answer: str
 
-    # Atomic claims extracted from `answer`. Shape is the judge's call.
+    # Atomic claims extracted from `answer`: {"claim": str, "checkable": bool}.
     claims: list
 
-    # One judgement per claim (supported / unsupported + its receipt).
+    # One verdict per claim, same order as `claims`; None where the claim
+    # wasn't checkable. Each verdict: {"verdict", "quote", "explanation"}.
     verdicts: list
 
     # None until the verdict node has run, so "not scored yet" is
     # distinguishable from "scored 0.0".
     hallucination_rate: float | None
+
+    # Tallies from the verdict node, alongside hallucination_rate.
+    total_claims: int
+    checkable_claims: int
+    not_checkable_claims: int
+    supported_claims: int
+    unsupported_claims: int
+
+    # Per-claim receipts: {"claim", "checkable", "verdict", "quote", "explanation"}.
+    findings: list
