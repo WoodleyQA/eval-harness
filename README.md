@@ -67,7 +67,7 @@ The example needs an Anthropic API key because the judge makes live model calls.
 pytest tests/
 ```
 
-The ingest tests run offline. The tests that call the judge (the wiring test and the 14-claim validation regression) are live API tests and are skipped when `ANTHROPIC_API_KEY` is not set. With a key set, `pytest tests/` re-checks the judge against the hand-labeled answer key.
+The ingest tests run offline. The tests that call the judge (the wiring test and the 14-claim validation regression) are live API tests and are skipped when `ANTHROPIC_API_KEY` is not set. With a key set, `pytest tests/` re-checks the judge against the hand-labeled answer key. In CI, the offline tests run on every push; the live validation is a separate manual workflow (Actions tab, "eval-harness CI", Run workflow) so it only spends tokens when you ask it to.
 
 ## Future Work
 
