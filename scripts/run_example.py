@@ -34,8 +34,8 @@ REPORT_FIELDS = [
 ]
 
 
-def _first_patient_record() -> Path:
-    """The first Synthea patient bundle in data/fhir/, alphabetically.
+def _first_patient_record() -> Path | None:
+    """The first Synthea patient bundle in data/fhir/, alphabetically, if any.
 
     Excludes the hospital/practitioner reference files Synthea also emits —
     those aren't patient records the judge can be run against.
@@ -45,19 +45,31 @@ def _first_patient_record() -> Path:
         for p in (ROOT / "data" / "fhir").glob("*.json")
         if "Information" not in p.stem
     )
-    if not candidates:
-        raise FileNotFoundError(
-            "No patient records in data/fhir/ — see README for how to generate them."
-        )
-    return candidates[0]
+    return candidates[0] if candidates else None
+
+
+def _bundled_record() -> tuple[str, str]:
+    """The first record of the committed validation set, as (label, source text).
+
+    data/ is gitignored (generated Synthea output is ~47MB), so a fresh clone
+    has no records. The validation set already carries four flattened synthetic
+    records, which is enough to run the example with no extra setup.
+    """
+    with open(ROOT / "validation_set.json", encoding="utf-8") as f:
+        record = json.load(f)[0]
+    return "validation_set.json[0] (bundled)", record["source_lines"]
 
 
 def main() -> None:
     record_path = _first_patient_record()
-    print(f"Source record: {record_path.name}")
+    if record_path is not None:
+        label, source = record_path.name, str(record_path)
+    else:
+        label, source = _bundled_record()
+    print(f"Source record: {label}")
     print(f"Answer under evaluation: {ANSWER}\n")
 
-    state = run(source_record=str(record_path), answer=ANSWER)
+    state = run(source_record=source, answer=ANSWER)
 
     report = {field: state[field] for field in REPORT_FIELDS}
     print(json.dumps(report, indent=2))

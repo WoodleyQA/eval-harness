@@ -45,6 +45,7 @@ def _load_checkable_claims():
     return cases
 
 
+@pytest.mark.live
 @pytest.mark.parametrize(
     "source_lines, claim_text, expected_verdict", _load_checkable_claims()
 )

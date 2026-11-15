@@ -51,7 +51,7 @@ Result: hallucination_rate: 0.4 (2 of 5 checkable claims unsupported)
 ## Running It
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/WoodleyQA/eval-harness
 cd eval-harness
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -59,7 +59,15 @@ cp .env.example .env  # add your Anthropic API key
 python scripts/run_example.py
 ```
 
-Sample Synthea patient records are included in data/.
+The example needs an Anthropic API key because the judge makes live model calls. With no setup beyond that, it runs against the first synthetic patient record bundled in `validation_set.json`. To run against full Synthea output instead, generate FHIR bundles with [Synthea](https://github.com/synthetichealth/synthea) and place them in `data/fhir/`; the script picks those up first.
+
+## Running the tests
+
+```bash
+pytest tests/
+```
+
+The ingest tests run offline. The tests that call the judge (the wiring test and the 14-claim validation regression) are live API tests and are skipped when `ANTHROPIC_API_KEY` is not set. With a key set, `pytest tests/` re-checks the judge against the hand-labeled answer key.
 
 ## Future Work
 

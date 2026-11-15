@@ -45,8 +45,9 @@ FHIR_BUNDLE = {
 }
 
 
+@pytest.mark.live
 def test_graph_returns_verdict_shape():
-    """A run populates every field of EvalState."""
+    """A run populates every field of EvalState (live: the judge calls the API)."""
     state = run(source_record=SOURCE, answer=ANSWER)
 
     for key in ("source_record", "answer", "claims", "verdicts", "hallucination_rate"):
@@ -61,7 +62,7 @@ def test_graph_returns_verdict_shape():
 
 def test_ingest_passes_inputs_through():
     """Text handed in is the text the judge sees."""
-    state = run(source_record=SOURCE, answer=ANSWER)
+    state = ingest({"source_record": SOURCE, "answer": ANSWER})
 
     assert state["source_record"] == SOURCE
     assert state["answer"] == ANSWER
@@ -72,7 +73,7 @@ def test_ingest_reads_a_record_from_disk(tmp_path):
     record = tmp_path / "record.txt"
     record.write_text(SOURCE, encoding="utf-8")
 
-    state = run(source_record=str(record), answer=ANSWER)
+    state = ingest({"source_record": str(record), "answer": ANSWER})
 
     assert state["source_record"] == SOURCE
 
